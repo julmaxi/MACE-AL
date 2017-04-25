@@ -1,5 +1,7 @@
-from tkinter import *
-from tkinter import ttk
+#from Tkinter import *
+#from Tkinter import ttk
+import ttk
+from Tkinter import *
 
 import maceal.core as core
 from argparse import ArgumentParser
