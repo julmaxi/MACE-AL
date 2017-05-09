@@ -7,6 +7,8 @@ import random
 
 from collections import namedtuple
 
+from itertools import izip
+
 MaceResult = namedtuple("MaceResult", "predictions competences entropies")
 
 
@@ -65,12 +67,14 @@ def read_line_file(filename):
 
     return result
 
-def argmax(l):
+def argmax(l, blacklist = []):
     assert len(l) > 0, "Can not compute maximum of empty list"
     max_idx = None
     max_val = None
 
     for idx, val in enumerate(l):
+        if idx in blacklist:
+            continue
         if max_idx is None:
             max_idx = idx
             max_val = val
@@ -153,6 +157,8 @@ class AnnotationState:
         self.mace_runner = mace_runner
         self.token_sequence = token_sequence
 
+        self.request_blacklist = set()
+
         self.user_feedback = [None for _ in xrange(self.parser_predictions.num_tokens)]
 
         f, feedback_filename = tempfile.mkstemp()
@@ -160,6 +166,7 @@ class AnnotationState:
         #f.close()
         self.feedback_filename = feedback_filename
         #self.replace_lowest_competence_annotator = replace_lowest_competence_annotator
+        self.current_numeric_predictions = []
 
     def get_next_annotation_request(self):
         args = {}
@@ -173,12 +180,35 @@ class AnnotationState:
             args["controls"] = self.feedback_filename
 
         predictions, competences, entropies = self.mace_runner.run_mace(self.parser_predictions.dumpf(mapper = self.numerical_mapper), **args)
+        self.current_numeric_predictions = predictions
 
-        requested_index = argmax(entropies)
+        requested_index = argmax(entropies, self.request_blacklist)
 
         return AnnotationRequest(
                 self.parser_predictions.get_all_predictions_at_index(requested_index),
                 self.token_sequence[requested_index])
+
+    def get_current_predictions(self):
+        preds = []
+        curr_sent_preds = []
+        curr_sent = None
+
+        for tok, pred in izip(self.token_sequence, self.current_numeric_predictions):
+            if curr_sent is None:
+                curr_sent = tok.sentence
+            elif curr_sent != tok.sentence:
+                preds.append(curr_sent_preds)
+
+                curr_sent_preds = []
+                curr_sent = tok.sentence
+            pred_text = self.numerical_mapper.reverse_map_value(int(pred))
+            curr_sent_preds.append((tok.form, pred_text))
+
+        preds.append(curr_sent_preds)
+        return preds
+
+    def blacklist_request(self, request):
+        self.request_blacklist.add(request.token.global_index)
 
     def process_annotation(self, request, annotation):
         annotator_replacement_index = random.randint(0, self.parser_predictions.num_annotators - 1)
@@ -209,6 +239,9 @@ class CategorialToNumericConverter:
             self.counter += 1
 
         return num_value
+
+    def reverse_map_value(self, val):
+        return self.reverse_map[val]
 
 class ParserPredictionTable:
     def __init__(self, table):
@@ -262,9 +295,3 @@ class ParserPredictionTable:
 
     def cleanup(self):
         os.remove(self.fname)
-
-
-
-
-
-
