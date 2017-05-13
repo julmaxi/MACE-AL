@@ -9,63 +9,9 @@ from collections import namedtuple
 
 from itertools import izip
 
+import reader
+
 MaceResult = namedtuple("MaceResult", "predictions competences entropies")
-
-
-Token = namedtuple("Token", "form sentence global_index")
-
-class Sentence:
-    def __init__(self):
-        self.tokens = []
-
-    def __iter__(self):
-        return iter(self.tokens)
-
-    def append_token(self, tok):
-        self.tokens.append(tok)
-
-    @property
-    def raw_text(self):
-        return " ".join(map(lambda x: x.form, self.tokens))
-
-def read_sentence_file(fname):
-    sents = []
-    curr_sent = None
-    curr_tok_idx = 0
-
-    with open(fname) as f:
-        for line in f:
-            line = line.strip()
-
-            if curr_sent is None:
-                curr_sent = Sentence()
-
-            if len(line) == 0:
-                sents.append(curr_sent)
-                curr_sent = None
-            else:
-                curr_sent.append_token(Token(line, curr_sent, curr_tok_idx))
-
-                curr_tok_idx += 1
-
-    return sents
-                
-
-def read_tab_file(filename):
-    result = []
-    with open(filename) as f:
-        for line in f:
-            result.append(line.strip().split())
-
-    return result
-
-def read_line_file(filename):
-    result = []
-    with open(filename) as f:
-        for line in f:
-            result.append(line.strip())
-
-    return result
 
 def argmax(l, blacklist = []):
     assert len(l) > 0, "Can not compute maximum of empty list"
@@ -110,13 +56,13 @@ class MaceRunner:
         entropies = None
         if args.get("entropies", False):
             entropies_file = path.join(outdir, "out.entropies")
-            entropies = list(map(float, read_line_file(entropies_file)))
+            entropies = list(map(float, reader.read_line_file(entropies_file)))
 
         competences_file = path.join(outdir, "out.competence")
-        competences = list(map(float, read_tab_file(competences_file)[0]))
+        competences = list(map(float, reader.read_tab_file(competences_file)[0]))
 
         predictions_file = path.join(outdir, "out.prediction")
-        predictions = read_line_file(predictions_file)
+        predictions = reader.read_line_file(predictions_file)
 
         shutil.rmtree(outdir)
 

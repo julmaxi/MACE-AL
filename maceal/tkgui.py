@@ -5,16 +5,18 @@ from Tkinter import *
 import tkMessageBox
 import tkFileDialog
 
-import maceal.core as core
 from argparse import ArgumentParser
 import glob
 
-from util import readPredictions
 from collections import Counter
 
 import os.path
 
 import cPickle
+
+import maceal.core as core
+from util import readPredictions
+import reader
 
 user_tag = None
 annotation_state = None
@@ -31,7 +33,7 @@ class AnnotationGUI:
 
         if os.path.isdir(args.annotation_dir):
             preds = readPredictions(args.annotation_dir)
-            sentences = core.read_sentence_file(glob.glob(args.annotation_dir + "/*.txt")[0])
+            sentences = reader.read_sentence_file(glob.glob(args.annotation_dir + "/*.txt")[0])
             flat_tok_list = [tok for sent in sentences for tok in sent]
             self.annotation_state = core.AnnotationState(preds, flat_tok_list, core.MaceRunner(entropies = True, restarts = args.mace_restarts))
         else:
