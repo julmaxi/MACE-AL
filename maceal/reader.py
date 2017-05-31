@@ -16,6 +16,9 @@ class Sentence:
     def __iter__(self):
         return iter(self.tokens)
 
+    def __len__(self):
+        return len(self.tokens)
+
     def append_token(self, tok):
         self.tokens.append(tok)
 
@@ -50,6 +53,9 @@ def read_sentence_file(fname):
                 curr_sent.append_token(Token(form, curr_sent, curr_tok_idx, **additional_attribs))
 
                 curr_tok_idx += 1
+
+        if len(curr_sent) > 0:
+            sents.append(curr_sent)
 
     return sents
                 

@@ -2,6 +2,8 @@ import os
 import os.path as path
 import tempfile
 import shutil
+import subprocess
+import shlex
 
 import random
 
@@ -51,7 +53,13 @@ class MaceRunner:
 
         outdir = tempfile.mkdtemp()
         #TODO: Cross plattform -> do not redirect to unix specific place
-        os.system(self._construct_command(path.join(outdir, "out"), predictions_filename, **args) + " > /dev/null")
+        #os.system(self._construct_command(path.join(outdir, "out"), predictions_filename, **args) + " > /dev/null")
+        with open(os.devnull, 'w') as devnull:
+            subprocess.call(
+                shlex.split(self._construct_command(path.join(outdir, "out"), predictions_filename, **args)),
+                stderr=devnull
+            )
+
 
         entropies = None
         if args.get("entropies", False):
