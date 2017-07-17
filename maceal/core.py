@@ -15,7 +15,8 @@ import reader
 
 MaceResult = namedtuple("MaceResult", "predictions competences entropies")
 
-def argmax(l, blacklist = []):
+
+def argmax(l, blacklist=[]):
     assert len(l) > 0, "Can not compute maximum of empty list"
     max_idx = None
     max_val = None
@@ -38,7 +39,7 @@ class MaceRunner:
     Runs Mace Command
     """
 
-    def __init__(self, jar_path = "MACE.jar", **kwargs):
+    def __init__(self, jar_path="MACE.jar", **kwargs):
         self.jar_path = jar_path
         self.preset_args = kwargs
 
@@ -52,14 +53,14 @@ class MaceRunner:
             args[key] = val
 
         outdir = tempfile.mkdtemp()
-        #TODO: Cross plattform -> do not redirect to unix specific place
+        # TODO: Cross plattform -> do not redirect to unix specific place
         #os.system(self._construct_command(path.join(outdir, "out"), predictions_filename, **args) + " > /dev/null")
         with open(os.devnull, 'w') as devnull:
             subprocess.call(
-                shlex.split(self._construct_command(path.join(outdir, "out"), predictions_filename, **args)),
+                shlex.split(self._construct_command(
+                    path.join(outdir, "out"), predictions_filename, **args)),
                 stderr=devnull
             )
-
 
         entropies = None
         if args.get("entropies", False):
@@ -67,7 +68,8 @@ class MaceRunner:
             entropies = list(map(float, reader.read_line_file(entropies_file)))
 
         competences_file = path.join(outdir, "out.competence")
-        competences = list(map(float, reader.read_tab_file(competences_file)[0]))
+        competences = list(
+            map(float, reader.read_tab_file(competences_file)[0]))
 
         predictions_file = path.join(outdir, "out.prediction")
         predictions = reader.read_line_file(predictions_file)
@@ -79,10 +81,10 @@ class MaceRunner:
     def _construct_command(self,
                            prefix,
                            predictions_filename,
-                           entropies = False,
-                           controls = None,
-                           restarts = None,
-                           vanilla = False):
+                           entropies=False,
+                           controls=None,
+                           restarts=None,
+                           vanilla=False):
         arg_strings = []
         arg_strings.append('--prefix "{}"'.format(prefix))
 
@@ -98,12 +100,14 @@ class MaceRunner:
         if vanilla:
             arg_strings.append('--em')
 
-        return 'java -jar "{jar}" {args} {f}'.format(jar = self.jar_path, args = " ".join(arg_strings), f = predictions_filename)
+        return 'java -jar "{jar}" {args} {f}'.format(jar=self.jar_path, args=" ".join(arg_strings), f=predictions_filename)
 
-AnnotationRequest = namedtuple("AnnotationRequest", "original_annotations token")
+AnnotationRequest = namedtuple(
+    "AnnotationRequest", "original_annotations token")
+
 
 class AnnotationState:
-    def __init__(self, raw_parser_predictions, token_sequence, mace_runner, use_feedback = True):
+    def __init__(self, raw_parser_predictions, token_sequence, mace_runner, use_feedback=True):
         self.numerical_mapper = CategorialToNumericConverter()
         self.parser_predictions = ParserPredictionTable(raw_parser_predictions)
         self.current_iteration = 0
@@ -113,11 +117,12 @@ class AnnotationState:
 
         self.request_blacklist = set()
 
-        self.user_feedback = [None for _ in xrange(self.parser_predictions.num_tokens)]
+        self.user_feedback = [None for _ in xrange(
+            self.parser_predictions.num_tokens)]
 
         f, feedback_filename = tempfile.mkstemp()
         os.close(f)
-        #f.close()
+        # f.close()
         self.feedback_filename = feedback_filename
         #self.replace_lowest_competence_annotator = replace_lowest_competence_annotator
         self.current_numeric_predictions = []
@@ -128,19 +133,22 @@ class AnnotationState:
             with open(self.feedback_filename, "w") as f:
                 for user_feedback in self.user_feedback:
                     if user_feedback is not None:
-                        f.write("{}".format(self.numerical_mapper.map_value(user_feedback)))
+                        f.write("{}".format(
+                            self.numerical_mapper.map_value(user_feedback)))
                     f.write("\n")
 
             args["controls"] = self.feedback_filename
 
-        predictions, competences, entropies = self.mace_runner.run_mace(self.parser_predictions.dumpf(mapper = self.numerical_mapper), **args)
+        predictions, competences, entropies = self.mace_runner.run_mace(
+            self.parser_predictions.dumpf(mapper=self.numerical_mapper), **args)
         self.current_numeric_predictions = predictions
 
         requested_index = argmax(entropies, self.request_blacklist)
 
         return AnnotationRequest(
-                self.parser_predictions.get_all_predictions_at_index(requested_index),
-                self.token_sequence[requested_index])
+            self.parser_predictions.get_all_predictions_at_index(
+                requested_index),
+            self.token_sequence[requested_index])
 
     def get_current_predictions(self):
         preds = []
@@ -165,9 +173,11 @@ class AnnotationState:
         self.request_blacklist.add(request.token.global_index)
 
     def process_annotation(self, request, annotation):
-        annotator_replacement_index = random.randint(0, self.parser_predictions.num_annotators - 1)
-        
-        self.parser_predictions.set_prediction(annotator_replacement_index, request.token.global_index, annotation)
+        annotator_replacement_index = random.randint(
+            0, self.parser_predictions.num_annotators - 1)
+
+        self.parser_predictions.set_prediction(
+            annotator_replacement_index, request.token.global_index, annotation)
         self.user_feedback[request.token.global_index] = annotation
 
         self.current_iteration += 1
@@ -175,6 +185,7 @@ class AnnotationState:
     def cleanup(self):
         os.remove(self.feedback_filename)
         self.parser_predictions.cleanup()
+
 
 class CategorialToNumericConverter:
     def __init__(self):
@@ -186,7 +197,7 @@ class CategorialToNumericConverter:
         num_value = self.forward_map.get(val)
 
         if num_value is None:
-            num_value =  self.counter
+            num_value = self.counter
             self.forward_map[val] = num_value
             self.reverse_map.append(val)
 
@@ -197,9 +208,10 @@ class CategorialToNumericConverter:
     def reverse_map_value(self, val):
         return self.reverse_map[val]
 
+
 class ParserPredictionTable:
     def __init__(self, table):
-        #TODO: Probably better to copy
+        # TODO: Probably better to copy
         self.table = table
 
         self.fname = None
