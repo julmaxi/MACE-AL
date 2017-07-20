@@ -270,7 +270,7 @@ def parse_args():
         help="Disable autosaving after each annotation")
     parser.add_argument(
         "--mace-path",
-        default="Mace.jar",
+        default="MACE.jar",
         help="Path to the Mace jar file")
 
     args = parser.parse_args()
