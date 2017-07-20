@@ -113,48 +113,75 @@ AnnotationRequest = namedtuple(
     "AnnotationRequest", "original_annotations token")
 
 
-class AnnotationState:
-    def __init__(self, raw_parser_predictions, token_sequence, mace_runner, use_feedback=True):
-        self.parser_predictions = ParserPredictionTable(raw_parser_predictions)
+class AnnotationManager:
+    def __init__(self, state, mace_runner, use_feedback=True):
+        self.state = state
+        self.mace_runner = mace_runner
         self.use_feedback = use_feedback
         self.mace_runner = mace_runner
-        self.token_sequence = token_sequence
-
-        self.request_blacklist = set()
-        self.numerical_mapper = CategorialToNumericConverter()
-        self.current_iteration = 0
-        self.user_feedback = [None for _ in xrange(
-            self.parser_predictions.num_tokens)]
 
         f, feedback_filename = tempfile.mkstemp()
         os.close(f)
-        # f.close()
         self.feedback_filename = feedback_filename
-        #self.replace_lowest_competence_annotator = replace_lowest_competence_annotator
-        self.current_numeric_predictions = []
 
     def get_next_annotation_request(self):
         args = {}
-        if self.use_feedback and self.current_iteration > 0:
+        if len(self.state.token_sequence) <= self.state.current_iteration + len(self.state.request_blacklist):
+            return None
+
+        if self.use_feedback and self.state.current_iteration > 0:
             with open(self.feedback_filename, "w") as f:
-                for user_feedback in self.user_feedback:
+                for user_feedback in self.state.user_feedback:
                     if user_feedback is not None:
                         f.write("{}".format(
-                            self.numerical_mapper.map_value(user_feedback)))
+                            self.state.numerical_mapper.map_value(user_feedback)))
                     f.write("\n")
 
             args["controls"] = self.feedback_filename
 
         predictions, competences, entropies = self.mace_runner.run_mace(
-            self.parser_predictions.dumpf(mapper=self.numerical_mapper), **args)
-        self.current_numeric_predictions = predictions
+            self.state.parser_predictions.dumpf(mapper=self.state.numerical_mapper), **args)
+        self.state.current_numeric_predictions = predictions
 
-        requested_index = argmax(entropies, self.request_blacklist)
+        requested_index = argmax(entropies, self.state.request_blacklist)
 
         return AnnotationRequest(
-            self.parser_predictions.get_all_predictions_at_index(
+            self.state.parser_predictions.get_all_predictions_at_index(
                 requested_index),
-            self.token_sequence[requested_index])
+            self.state.token_sequence[requested_index])
+
+    def blacklist_request(self, request):
+        self.state.request_blacklist.add(request.token.global_index)
+
+    def process_annotation(self, request, annotation):
+        annotator_replacement_index = random.randint(
+            0, self.state.parser_predictions.num_annotators - 1)
+
+        self.state.parser_predictions.set_prediction(
+            annotator_replacement_index, request.token.global_index, annotation)
+        self.state.user_feedback[request.token.global_index] = annotation
+
+        self.state.current_iteration += 1
+
+    @property
+    def parser_predictions(self):
+        return self.state.parser_predictions
+
+    def cleanup(self):
+        os.remove(self.feedback_filename)
+        self.state.parser_predictions.cleanup()
+
+
+class AnnotationState:
+    def __init__(self, raw_parser_predictions, token_sequence):
+        self.parser_predictions = ParserPredictionTable(raw_parser_predictions)
+        self.current_numeric_predictions = []
+        self.token_sequence = token_sequence
+        self.request_blacklist = set()
+        self.numerical_mapper = CategorialToNumericConverter()
+        self.current_iteration = 0
+        self.user_feedback = [None for _ in xrange(
+            self.parser_predictions.num_tokens)]
 
     def get_current_predictions(self):
         preds = []
@@ -174,23 +201,6 @@ class AnnotationState:
 
         preds.append(curr_sent_preds)
         return preds
-
-    def blacklist_request(self, request):
-        self.request_blacklist.add(request.token.global_index)
-
-    def process_annotation(self, request, annotation):
-        annotator_replacement_index = random.randint(
-            0, self.parser_predictions.num_annotators - 1)
-
-        self.parser_predictions.set_prediction(
-            annotator_replacement_index, request.token.global_index, annotation)
-        self.user_feedback[request.token.global_index] = annotation
-
-        self.current_iteration += 1
-
-    def cleanup(self):
-        os.remove(self.feedback_filename)
-        self.parser_predictions.cleanup()
 
 
 class CategorialToNumericConverter:

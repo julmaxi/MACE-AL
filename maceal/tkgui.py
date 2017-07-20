@@ -29,31 +29,30 @@ class AnnotationGUI:
         self.save_filename = args.save_filename
         self.autosave = args.autosave
 
-        if not os.path.isfile(args.save_filename):
-            preds, sentences = reader.read_annotation_files(
-                args.annotation_files,
-                annotation_file_format=args.annotation_file_format,
-                plaintext_filename=args.plaintext_filename)
-            """
-            preds = readPredictions(args.annotation_dir)
-            sentences = reader.read_sentence_file(
-                glob.glob(args.annotation_dir + "/*.txt")[0])
-            """
-            flat_tok_list = [tok for sent in sentences for tok in sent]
-
-            mace_runner = core.MaceRunner(
+        mace_runner = core.MaceRunner(
                 entropies=True,
                 restarts=args.mace_restarts,
                 jar_path=args.mace_path)
 
-            self.annotation_state = core.AnnotationState(
-                preds,
-                flat_tok_list,
-                mace_runner
-            )
+        if not os.path.isfile(args.save_filename):
+            state = self._read_annotation_state_from_args(args)
         else:
-            with open(args.save_filename, "rb") as f:
-                self.annotation_state = cPickle.load(f)
+            while True:
+                print("Found a previous annotation file at {}".format(args.save_filename))
+                response = raw_input("(C)ontiune or (O)verwrite?")
+                if response.lower() == "c":
+                    with open(args.save_filename, "rb") as f:
+                        state = cPickle.load(f)
+                    break
+                elif response.lower() == "o":
+                    state = self._read_annotation_state_from_args(args)
+                    break
+#                self.annotation_state = cPickle.load(f)
+
+        self.annotation_state = core.AnnotationManager(
+            state=state,
+            mace_runner=mace_runner
+        )
 
         self.root = Tk()
         self.root.title("Mace AL")
@@ -78,7 +77,8 @@ class AnnotationGUI:
             foreground='#FFFFFF',
             background="red",
             font=('TkDefaultText', 16, 'bold'))
-        self.text_box.grid(column=1, row=1, columnspan=3, sticky=(W, E))
+        self.text_box.grid(column=1, row=1, columnspan=3, sticky=(W, E, N, S))
+        self.text_box.bind("<Key>", lambda e: "break")
 
         ttk.Label(mainframe, textvariable=self.prediction_string_value).grid(
             column=1, row=2, columnspan=2, sticky=(W, E))
@@ -96,9 +96,12 @@ class AnnotationGUI:
             command=self.request_next_annotation).grid(
             column=3, row=3, sticky=E)
 
+        comment_box_label = ttk.Label(mainframe, text="Comment")
+        comment_box_label.grid(column=1, row=4, sticky=W)
+
         self.comment_box = Text(mainframe, height=2, font=(
             'TkDefaultText', 16), padx=5, pady=5)
-        self.comment_box.grid(column=1, row=4, columnspan=3, sticky=(W, E))
+        self.comment_box.grid(column=1, row=5, columnspan=3, sticky=(W, E))
 
         for child in mainframe.winfo_children():
             child.grid_configure(padx=5, pady=5)
@@ -114,6 +117,15 @@ class AnnotationGUI:
         file_menu.add_command(label="Save", command=self.save_state)
         file_menu.add_command(label="Save Predictions",
                               command=self.save_predictions)
+
+    def _read_annotation_state_from_args(self, args):
+        preds, sentences = reader.read_annotation_files(
+            args.annotation_files,
+            annotation_file_format=args.annotation_file_format,
+            plaintext_filename=args.plaintext_filename)
+        flat_tok_list = [tok for sent in sentences for tok in sent]
+        state = core.AnnotationState(preds, flat_tok_list)
+        return state
 
     def run(self):
         self.get_next_request()
@@ -136,6 +148,9 @@ class AnnotationGUI:
     def get_next_request(self):
         self.current_request = \
             self.annotation_state.get_next_annotation_request()
+        if self.current_request is None:
+            tkMessageBox.showinfo("End of Document", "The end of the document has been reached. No more annotations are possible.")
+            return
 
         predicted_counts = Counter(self.current_request.original_annotations)
         prediction_strings = []
@@ -201,11 +216,11 @@ class AnnotationGUI:
 
     def save_state(self):
         with open(self.save_filename, "wb") as f:
-            cPickle.dump(self.annotation_state, f)
+            cPickle.dump(self.annotation_state.state, f)
 
     def save_predictions(self):
         f = tkFileDialog.asksaveasfile(mode='w')
-        for sent_preds in self.annotation_state.get_current_predictions():
+        for sent_preds in self.annotation_state.state.get_current_predictions():
             f.write("\n".join(map(lambda t: "\t".join(t), sent_preds)))
             f.write("\n\n")
         f.close()
@@ -259,10 +274,6 @@ def parse_args():
         help="Path to the Mace jar file")
 
     args = parser.parse_args()
-
-    if len(args.annotation_files) == 0 and not args.load:
-        raise RuntimeError(
-            "If no annotation files are specified you must specify --load")
 
     return args
 
