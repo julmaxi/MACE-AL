@@ -41,12 +41,16 @@ class AnnotationGUI:
             """
             flat_tok_list = [tok for sent in sentences for tok in sent]
 
+            mace_runner = core.MaceRunner(
+                entropies=True,
+                restarts=args.mace_restarts,
+                jar_path=args.mace_path)
+
             self.annotation_state = core.AnnotationState(
                 preds,
                 flat_tok_list,
-                core.MaceRunner(
-                    entropies=True,
-                    restarts=args.mace_restarts))
+                mace_runner
+            )
         else:
             with open(args.save_filename, "rb") as f:
                 self.annotation_state = cPickle.load(f)
@@ -56,6 +60,8 @@ class AnnotationGUI:
 
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
+
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         mainframe = ttk.Frame(self.root, padding="3 3 12 12")
         mainframe.grid(column=0, row=0, sticky=N + W + E + S)
@@ -112,6 +118,10 @@ class AnnotationGUI:
     def run(self):
         self.get_next_request()
         self.root.mainloop()
+
+    def on_close(self):
+        self.root.destroy()
+        self.annotation_state.cleanup()
 
     def skip_annotation(self):
         self.annotation_state.blacklist_request(self.current_request)
@@ -202,7 +212,8 @@ class AnnotationGUI:
 
 
 def parse_args():
-    parser = ArgumentParser(description="A small tool for Mace Active Learning Annotation")
+    parser = ArgumentParser(
+        description="A small tool for Mace Active Learning Annotation")
 
     parser.add_argument(
         "annotation_files",
@@ -242,11 +253,16 @@ def parse_args():
         action="store_false",
         dest="autosave",
         help="Disable autosaving after each annotation")
+    parser.add_argument(
+        "--mace-path",
+        default="Mace.jar",
+        help="Path to the Mace jar file")
 
     args = parser.parse_args()
 
     if len(args.annotation_files) == 0 and not args.load:
-        raise RuntimeError("If no annotation files are specified you must specify --load")
+        raise RuntimeError(
+            "If no annotation files are specified you must specify --load")
 
     return args
 

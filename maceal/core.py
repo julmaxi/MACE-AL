@@ -47,6 +47,12 @@ class MaceRunner:
         """
         Runs a mace command and returns the results
         """
+
+        if not os.path.isfile(self.jar_path):
+            raise RuntimeError(
+                "Could not find MACE (looking at path '{}')".
+                format(self.jar_path))
+
         args = dict(self.preset_args)
 
         for key, val in kwargs.items():
@@ -54,7 +60,7 @@ class MaceRunner:
 
         outdir = tempfile.mkdtemp()
         # TODO: Cross plattform -> do not redirect to unix specific place
-        #os.system(self._construct_command(path.join(outdir, "out"), predictions_filename, **args) + " > /dev/null")
+        # os.system(self._construct_command(path.join(outdir, "out"), predictions_filename, **args) + " > /dev/null")
         with open(os.devnull, 'w') as devnull:
             subprocess.call(
                 shlex.split(self._construct_command(
@@ -102,21 +108,21 @@ class MaceRunner:
 
         return 'java -jar "{jar}" {args} {f}'.format(jar=self.jar_path, args=" ".join(arg_strings), f=predictions_filename)
 
+
 AnnotationRequest = namedtuple(
     "AnnotationRequest", "original_annotations token")
 
 
 class AnnotationState:
     def __init__(self, raw_parser_predictions, token_sequence, mace_runner, use_feedback=True):
-        self.numerical_mapper = CategorialToNumericConverter()
         self.parser_predictions = ParserPredictionTable(raw_parser_predictions)
-        self.current_iteration = 0
         self.use_feedback = use_feedback
         self.mace_runner = mace_runner
         self.token_sequence = token_sequence
 
         self.request_blacklist = set()
-
+        self.numerical_mapper = CategorialToNumericConverter()
+        self.current_iteration = 0
         self.user_feedback = [None for _ in xrange(
             self.parser_predictions.num_tokens)]
 
@@ -225,7 +231,6 @@ class ParserPredictionTable:
 
         for rows in zip(*self.table):
             f.write(",".join(map(lambda x: str(mapper.map_value(x)), rows)))
-            #f.write(",".join(map(lambda x: x.replace(",", ";"), rows)))
             f.write("\n")
 
         f.close()
