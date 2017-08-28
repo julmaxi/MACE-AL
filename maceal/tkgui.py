@@ -119,6 +119,9 @@ class AnnotationGUI:
                               command=self.save_predictions)
 
     def _read_annotation_state_from_args(self, args):
+        if len(args.annotation_files) == 0:
+            raise RuntimeError("No annotation files provided")
+
         preds, sentences = reader.read_annotation_files(
             args.annotation_files,
             annotation_file_format=args.annotation_file_format,
@@ -278,5 +281,9 @@ def parse_args():
     return args
 
 
-if __name__ == "__main__":
+def main():
     AnnotationGUI().run()
+
+
+if __name__ == "__main__":
+    main()
